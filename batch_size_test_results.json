@@ -1,0 +1,49 @@
+[
+  {
+    "batch_size": 64,
+    "success": true,
+    "allocated_gb": 1.69,
+    "reserved_gb": 5.17,
+    "max_allocated_gb": 4.58,
+    "free_gb": 29.68,
+    "total_gb": 31.37,
+    "loss": 0.980345
+  },
+  {
+    "batch_size": 128,
+    "success": true,
+    "allocated_gb": 1.81,
+    "reserved_gb": 8.89,
+    "max_allocated_gb": 7.74,
+    "free_gb": 29.56,
+    "total_gb": 31.37,
+    "loss": 0.980318
+  },
+  {
+    "batch_size": 256,
+    "success": true,
+    "allocated_gb": 2.06,
+    "reserved_gb": 16.23,
+    "max_allocated_gb": 13.94,
+    "free_gb": 29.31,
+    "total_gb": 31.37,
+    "loss": 0.997961
+  },
+  {
+    "batch_size": 512,
+    "success": true,
+    "allocated_gb": 2.56,
+    "reserved_gb": 26.86,
+    "max_allocated_gb": 26.33,
+    "free_gb": 28.81,
+    "total_gb": 31.37,
+    "loss": 1.004402
+  },
+  {
+    "batch_size": 1024,
+    "success": false,
+    "error": "OOM",
+    "allocated_gb": 27.07,
+    "reserved_gb": 30.09
+  }
+]

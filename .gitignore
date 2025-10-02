@@ -9,6 +9,9 @@ model_weights/
 # Figures
 figures/
 
+# Evaluation results
+eval_results/
+
 # Python cache
 __pycache__/
 *.py[cod]

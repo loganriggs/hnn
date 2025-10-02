@@ -1,55 +1,29 @@
 # %%
-from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-from datasets import load_dataset
 from torch.utils.data import DataLoader
 from bilinear import Linear, Bilinear, MLP, Config
-
-
-def calculate_fvu(x_orig, x_pred):
-    """Calculate Fraction of Variance Unexplained"""
-    mean = x_orig.mean(dim=0, keepdim=True)
-    numerator = torch.mean(torch.sum((x_orig - x_pred)**2, dim=-1))
-    denominator = torch.mean(torch.sum((x_orig - mean)**2, dim=-1))
-    return numerator / (denominator + 1e-6)
+from utils import (
+    calculate_fvu,
+    load_model_and_tokenizer,
+    create_pile_dataloader,
+    setup_optimizer,
+    normalize_data,
+    compute_metrics,
+    print_gpu_memory,
+    save_model_checkpoint
+)
 # %%
-# Load Pythia-440m model and tokenizer
+# Load Pythia-410m model and tokenizer
 model_name = "EleutherAI/pythia-410m"
 device = "cuda" if torch.cuda.is_available() else "cpu"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-tokenizer.pad_token = tokenizer.eos_token  # Set pad token
-model = AutoModelForCausalLM.from_pretrained(model_name)
-model.to(device)
+model, tokenizer = load_model_and_tokenizer(model_name, device)
 
 # Layer to extract activations from
 layer_idx = 3
 
 # %%
-# Create dataloader for Pile dataset with streaming to avoid downloading everything
-dataset = load_dataset(
-    "monology/pile-uncopyrighted",
-    split="train",
-    streaming=True  # Stream data without downloading all at once
-)
-
-# Tokenization function
-def tokenize_function(examples):
-    return tokenizer(
-        examples["text"],
-        truncation=True,
-        max_length=128,
-        padding="max_length",
-        return_tensors="pt"
-    )
-
-# Create an iterable dataset
-tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text", "meta"])
-
-# Create dataloader
-pile_dataloader = DataLoader(
-    tokenized_dataset,
-    batch_size=512,
-)
+# Create dataloader for Pile dataset
+pile_dataloader = create_pile_dataloader(tokenizer, batch_size=512, max_length=128)
 
 # %%
 # Define hooks for capturing activations
@@ -99,7 +73,7 @@ transcoder_cfg = Config(
 )
 
 # Choose model type: Linear, Bilinear, or MLP
-MODEL_TYPE = "Linear"  # Change this to test different models
+MODEL_TYPE = "MLP"  # Change this to test different models
 OPTIMIZER_TYPE = "Muon"  # "Muon" or "AdamW"
 if MODEL_TYPE == "Linear":
     transcoder = Linear(transcoder_cfg).to(device)
@@ -111,15 +85,7 @@ else:
     raise ValueError(f"Unknown model type: {MODEL_TYPE}")
 
 # Select optimizer
-if OPTIMIZER_TYPE == "Muon":
-    from muon import Muon
-    all_params = list(transcoder.parameters())
-#     optimizer = Muon(all_params, lr=transcoder_cfg.lr, adamw_params=[])
-    optimizer = Muon(all_params, lr=0.02, adamw_params=[]) #Default values for Muon
-elif OPTIMIZER_TYPE == "AdamW":
-    optimizer = torch.optim.AdamW(transcoder.parameters(), lr=transcoder_cfg.lr)
-else:
-    raise ValueError(f"Unknown optimizer type: {OPTIMIZER_TYPE}")
+optimizer = setup_optimizer(transcoder, optimizer_type=OPTIMIZER_TYPE, lr=transcoder_cfg.lr)
 
 criterion = torch.nn.MSELoss()
 
@@ -132,7 +98,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-DEBUG = False  # Set to True for quick testing
+DEBUG = True  # Set to True for quick testing
 n_batches = 20 if DEBUG else 1000  # Number of batches to train on
 
 # Track metrics
@@ -143,11 +109,7 @@ fvu_values = []
 transcoder.train()
 
 # Check initial GPU memory
-if device == 'cuda':
-    print(f"\nGPU Memory before training:")
-    print(f"  Allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-    print(f"  Reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
-    print(f"  Max allocated: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
+print_gpu_memory("before training")
 
 pbar = tqdm(enumerate(pile_dataloader), total=n_batches, desc="Training")
 for batch_idx, batch in pbar:
@@ -226,11 +188,7 @@ for batch_idx, batch in pbar:
 print("\nTraining complete!")
 
 # Final GPU memory check
-if device == 'cuda':
-    print(f"\nGPU Memory after training:")
-    print(f"  Allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-    print(f"  Reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
-    print(f"  Max allocated: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
+print_gpu_memory("after training")
 
 # Plot metrics with log scale
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 4))
@@ -260,23 +218,23 @@ ax3.set_yscale('log')
 ax3.grid(True, which="both", ls="-", alpha=0.2)
 
 plt.tight_layout()
-plot_path = f"figures/training_metrics_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}.png"
+plot_path = f"figures/training_metrics_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.png"
 plt.savefig(plot_path, dpi=150, bbox_inches='tight')
 print(f"Training plot saved to {plot_path}")
 plt.close()
 
 # Save model weights
-save_path = f"model_weights/transcoder_weights_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}.pt"
-torch.save({
-    'model_state_dict': transcoder.state_dict(),
-    'optimizer_state_dict': optimizer.state_dict(),
-    'config': transcoder_cfg,
-    'layer_idx': layer_idx,
-    'd_model': d_model,
-    'mse_losses': mse_losses,
-    'variance_explained': variance_explained,
-    'fvu_values': fvu_values
-}, save_path)
-print(f"Model saved to {save_path}")
+save_path = f"model_weights/transcoder_weights_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.pt"
+save_model_checkpoint(
+    transcoder,
+    optimizer,
+    save_path,
+    config=transcoder_cfg,
+    layer_idx=layer_idx,
+    d_model=d_model,
+    mse_losses=mse_losses,
+    variance_explained=variance_explained,
+    fvu_values=fvu_values
+)
 
 # %%
