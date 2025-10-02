@@ -1,11 +1,19 @@
 # %%
 import torch
+import yaml
+import argparse
+import os
+import sys
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from torch.utils.data import DataLoader
-from bilinear import Linear, Bilinear, MLP, Config
 import torch.nn.functional as F
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from utils import (
+    Linear, Bilinear, MLP, Config,
     calculate_fvu,
     load_model_and_tokenizer,
     create_pile_dataloader,
@@ -16,20 +24,31 @@ from utils import (
     save_model_checkpoint
 )
 
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description='HNN Layer Prediction Experiment')
+parser.add_argument('--config', type=str, default='default.yaml',
+                    help='Config file name in yaml_configs/ folder (default: default.yaml)')
+args = parser.parse_args()
+
+# Load configuration (go up one directory from experiments/)
+config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'yaml_configs', args.config)
+print(f"Loading config from: {config_path}")
+with open(config_path, 'r') as f:
+    config_dict = yaml.safe_load(f)
+
 
 # %%
-# Configuration
-INPUT_LAYER = 3   # Layer to extract input activations from
-TARGET_LAYER = 6  # Layer to predict activations for
-COMB_SEQ_N = 16   # Number of tokens to concatenate (reduces effective seq length)
-MAX_SEQ_LENGTH = 128
-EFFECTIVE_SEQ_LENGTH = MAX_SEQ_LENGTH // COMB_SEQ_N  # Will be 8 if COMB_SEQ_N=16
-BATCH_SIZE = 64   # Smaller batch size due to larger input dimension
-
-MODEL_TYPE = "Linear"  # "Linear", "Bilinear", or "MLP"
-OPTIMIZER_TYPE = "Muon"  # "Muon" or "AdamW"
-DEBUG = True  # Set to True for quick testing
-n_batches = 20 if DEBUG else 1000
+# Extract config values
+INPUT_LAYER = config_dict['layer_prediction']['input_layer']
+TARGET_LAYER = config_dict['layer_prediction']['target_layer']
+COMB_SEQ_N = config_dict['layer_prediction']['comb_seq_n']
+MAX_SEQ_LENGTH = config_dict['dataset']['max_length']
+EFFECTIVE_SEQ_LENGTH = MAX_SEQ_LENGTH // COMB_SEQ_N
+BATCH_SIZE = config_dict['layer_prediction']['batch_size']
+MODEL_TYPE = config_dict['layer_prediction']['model_type']
+OPTIMIZER_TYPE = config_dict['layer_prediction']['optimizer_type']
+DEBUG = config_dict['layer_prediction']['debug']
+n_batches = config_dict['layer_prediction']['n_batches'] if DEBUG else config_dict['layer_prediction']['n_batches_full']
 
 print(f"\nConfiguration:")
 print(f"  Input Layer: {INPUT_LAYER}")
@@ -42,9 +61,9 @@ print(f"  Optimizer: {OPTIMIZER_TYPE}")
 print(f"  Number of batches: {n_batches}")
 
 # %%
-# Load Pythia-410m model and tokenizer
-model_name = "EleutherAI/pythia-410m"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Load model and tokenizer from config
+model_name = config_dict['model']['name']
+device = config_dict['model']['device'] if torch.cuda.is_available() else "cpu"
 model, tokenizer = load_model_and_tokenizer(model_name, device)
 
 print(f"\nModel loaded: {model_name}")
@@ -101,14 +120,17 @@ print(f"  Hidden dimension: {d_model}")
 # Initialize transcoder with concatenated input dimension
 n_inputs = d_model * COMB_SEQ_N  # Concatenate COMB_SEQ_N tokens
 n_outputs = d_model
+hidden_multiplier = config_dict['layer_prediction']['hidden_multiplier']
+learning_rate = config_dict['layer_prediction']['learning_rate']
+bias = config_dict['layer_prediction']['bias']
 
 transcoder_cfg = Config(
     n_inputs=n_inputs,
-    n_hidden=n_inputs * 4,  # 4x expansion
+    n_hidden=n_inputs * hidden_multiplier,
     n_outputs=n_outputs,
-    lr=0.001,
+    lr=learning_rate,
     device=device,
-    bias=True
+    bias=bias
 )
 
 if MODEL_TYPE == "Linear":

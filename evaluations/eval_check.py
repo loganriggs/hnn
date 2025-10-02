@@ -13,8 +13,19 @@ This script:
 
 import torch
 import torch.nn.functional as F
-from utils import load_model_and_tokenizer, create_pile_dataloader, calculate_fvu, normalize_data
-from bilinear import Linear, Bilinear, MLP, Config
+import os
+import sys
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils import (
+    Linear, Bilinear, MLP, Config,
+    load_model_and_tokenizer,
+    create_pile_dataloader,
+    calculate_fvu,
+    normalize_data
+)
 import json
 from datetime import datetime
 
@@ -418,7 +429,8 @@ print("SAVING RESULTS")
 print("=" * 80)
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-results_file = f"eval_results/eval_results_{timestamp}.txt"
+results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'eval_results')
+results_file = os.path.join(results_dir, f"eval_results_{timestamp}.txt")
 
 with open(results_file, 'w') as f:
     f.write("=" * 80 + "\n")

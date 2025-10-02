@@ -1,0 +1,46 @@
+# HNN Transcoding Experiment Configuration
+
+# Model settings
+model:
+  name: "EleutherAI/pythia-410m"
+  device: "cuda"  # "cuda" or "cpu"
+
+# Dataset settings
+dataset:
+  name: "monology/pile-uncopyrighted"
+  split: "train"
+  max_length: 128
+
+# Transcoding experiment settings (transcoding.py)
+transcoding:
+  layer_idx: 3  # Layer to extract MLP activations from
+  model_type: "MLP"  # "Linear", "Bilinear", or "MLP"
+  optimizer_type: "Muon"  # "Muon" or "AdamW"
+  batch_size: 512
+  learning_rate: 0.001  # Note: Muon will override this with 0.02
+  hidden_multiplier: 4  # Hidden size = d_model * hidden_multiplier
+  bias: true
+  debug: true
+  n_batches: 20  # For debug mode
+  n_batches_full: 1000  # For full training
+
+# Layer prediction experiment settings (layer_prediction.py)
+layer_prediction:
+  input_layer: 3
+  target_layer: 6
+  comb_seq_n: 16  # Number of tokens to concatenate
+  model_type: "Linear"  # "Linear", "Bilinear", or "MLP"
+  optimizer_type: "Muon"  # "Muon" or "AdamW"
+  batch_size: 64
+  learning_rate: 0.001  # Note: Muon will override this with 0.02
+  hidden_multiplier: 4  # Hidden size = n_inputs * hidden_multiplier
+  bias: true
+  debug: true
+  n_batches: 20  # For debug mode
+  n_batches_full: 1000  # For full training
+
+# Evaluation settings
+evaluation:
+  n_eval_batches: 10
+  n_sample_positions: 6
+  n_sample_datapoints: 3

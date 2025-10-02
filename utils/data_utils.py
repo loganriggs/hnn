@@ -54,7 +54,7 @@ def create_pile_dataloader(tokenizer, batch_size=512, max_length=128):
 def setup_optimizer(transcoder, optimizer_type="Muon", lr=0.001):
     """Setup optimizer (Muon or AdamW)"""
     if optimizer_type == "Muon":
-        from muon import Muon
+        from .muon import Muon
         all_params = list(transcoder.parameters())
         optimizer = Muon(all_params, lr=0.02, adamw_params=[])
     elif optimizer_type == "AdamW":

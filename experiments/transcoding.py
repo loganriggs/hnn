@@ -1,8 +1,16 @@
 # %%
 import torch
+import yaml
+import argparse
+import os
+import sys
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from torch.utils.data import DataLoader
-from bilinear import Linear, Bilinear, MLP, Config
 from utils import (
+    Linear, Bilinear, MLP, Config,
     calculate_fvu,
     load_model_and_tokenizer,
     create_pile_dataloader,
@@ -12,18 +20,35 @@ from utils import (
     print_gpu_memory,
     save_model_checkpoint
 )
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description='HNN MLP Transcoding Experiment')
+parser.add_argument('--config', type=str, default='default.yaml',
+                    help='Config file name in yaml_configs/ folder (default: default.yaml)')
+args = parser.parse_args()
+
+# Load configuration (go up one directory from experiments/)
+config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'yaml_configs', args.config)
+print(f"Loading config from: {config_path}")
+with open(config_path, 'r') as f:
+    config_dict = yaml.safe_load(f)
 # %%
-# Load Pythia-410m model and tokenizer
-model_name = "EleutherAI/pythia-410m"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Extract config values
+model_name = config_dict['model']['name']
+device = config_dict['model']['device'] if torch.cuda.is_available() else "cpu"
+layer_idx = config_dict['transcoding']['layer_idx']
+MODEL_TYPE = config_dict['transcoding']['model_type']
+OPTIMIZER_TYPE = config_dict['transcoding']['optimizer_type']
+BATCH_SIZE = config_dict['transcoding']['batch_size']
+MAX_SEQ_LENGTH = config_dict['dataset']['max_length']
+DEBUG = config_dict['transcoding']['debug']
+n_batches = config_dict['transcoding']['n_batches'] if DEBUG else config_dict['transcoding']['n_batches_full']
+
+# Load model and tokenizer
 model, tokenizer = load_model_and_tokenizer(model_name, device)
 
-# Layer to extract activations from
-layer_idx = 3
-
-# %%
 # Create dataloader for Pile dataset
-pile_dataloader = create_pile_dataloader(tokenizer, batch_size=512, max_length=128)
+pile_dataloader = create_pile_dataloader(tokenizer, batch_size=BATCH_SIZE, max_length=MAX_SEQ_LENGTH)
 
 # %%
 # Define hooks for capturing activations
@@ -63,18 +88,20 @@ print(f"MLP output shape: {mlp_outputs.shape}")
 # %%
 # Initialize transcoder model to replicate MLP behavior
 d_model = mlp_inputs.shape[-1]  # Get hidden dimension from MLP
+hidden_multiplier = config_dict['transcoding']['hidden_multiplier']
+learning_rate = config_dict['transcoding']['learning_rate']
+bias = config_dict['transcoding']['bias']
+
 transcoder_cfg = Config(
     n_inputs=d_model,
-    n_hidden=d_model*4,
+    n_hidden=d_model * hidden_multiplier,
     n_outputs=d_model,
-    lr=0.001,
+    lr=learning_rate,
     device=device,
-    bias=True
+    bias=bias
 )
 
-# Choose model type: Linear, Bilinear, or MLP
-MODEL_TYPE = "MLP"  # Change this to test different models
-OPTIMIZER_TYPE = "Muon"  # "Muon" or "AdamW"
+# Initialize model based on config
 if MODEL_TYPE == "Linear":
     transcoder = Linear(transcoder_cfg).to(device)
 elif MODEL_TYPE == "Bilinear":
@@ -97,9 +124,6 @@ print(f"Using {OPTIMIZER_TYPE} optimizer")
 import torch.nn.functional as F
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
-DEBUG = True  # Set to True for quick testing
-n_batches = 20 if DEBUG else 1000  # Number of batches to train on
 
 # Track metrics
 mse_losses = []

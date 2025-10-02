@@ -1,0 +1,41 @@
+# Layer Prediction L3->L6 - Full Training (1000 batches)
+
+model:
+  name: "EleutherAI/pythia-410m"
+  device: "cuda"
+
+dataset:
+  name: "monology/pile-uncopyrighted"
+  split: "train"
+  max_length: 128
+
+transcoding:
+  layer_idx: 3
+  model_type: "MLP"
+  optimizer_type: "Muon"
+  batch_size: 512
+  learning_rate: 0.001
+  hidden_multiplier: 4
+  bias: true
+  debug: false
+  n_batches: 20
+  n_batches_full: 1000
+
+layer_prediction:
+  input_layer: 3
+  target_layer: 6
+  comb_seq_n: 16
+  model_type: "Linear"
+  optimizer_type: "Muon"
+  batch_size: 64
+  learning_rate: 0.001
+  hidden_multiplier: 4
+  bias: true
+  debug: false
+  n_batches: 20
+  n_batches_full: 1000
+
+evaluation:
+  n_eval_batches: 10
+  n_sample_positions: 6
+  n_sample_datapoints: 3
