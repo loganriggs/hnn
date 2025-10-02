@@ -126,7 +126,7 @@ bias = config_dict['layer_prediction']['bias']
 
 transcoder_cfg = Config(
     n_inputs=n_inputs,
-    n_hidden=n_inputs * hidden_multiplier,
+    n_hidden=int(n_inputs * hidden_multiplier),
     n_outputs=n_outputs,
     lr=learning_rate,
     device=device,

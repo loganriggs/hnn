@@ -25,13 +25,23 @@ from utils import (
 parser = argparse.ArgumentParser(description='HNN MLP Transcoding Experiment')
 parser.add_argument('--config', type=str, default='default.yaml',
                     help='Config file name in yaml_configs/ folder (default: default.yaml)')
+parser.add_argument('--config-path', type=str, default=None,
+                    help='Full path to config file (overrides --config)')
 args = parser.parse_args()
 
-# Load configuration (go up one directory from experiments/)
-config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'yaml_configs', args.config)
+# Load configuration
+if args.config_path:
+    config_path = args.config_path
+else:
+    # Go up one directory from experiments/ to get to yaml_configs/
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'yaml_configs', args.config)
 print(f"Loading config from: {config_path}")
 with open(config_path, 'r') as f:
     config_dict = yaml.safe_load(f)
+
+# Check for sweep metadata (added by run_sweep.py)
+sweep_metadata = config_dict.pop('_sweep_metadata', None)
+
 # %%
 # Extract config values
 model_name = config_dict['model']['name']
@@ -94,7 +104,7 @@ bias = config_dict['transcoding']['bias']
 
 transcoder_cfg = Config(
     n_inputs=d_model,
-    n_hidden=d_model * hidden_multiplier,
+    n_hidden=int(d_model * hidden_multiplier),
     n_outputs=d_model,
     lr=learning_rate,
     device=device,
@@ -123,7 +133,6 @@ print(f"Using {OPTIMIZER_TYPE} optimizer")
 # Training loop
 import torch.nn.functional as F
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 
 # Track metrics
 mse_losses = []
@@ -214,41 +223,23 @@ print("\nTraining complete!")
 # Final GPU memory check
 print_gpu_memory("after training")
 
-# Plot metrics with log scale
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 4))
+# Generate filename with sweep parameter if applicable
+if sweep_metadata:
+    param_name = sweep_metadata['param'].split('.')[-1]  # e.g., "hidden_multiplier"
+    param_value = sweep_metadata['value']
+    sweep_str = f"_{param_name}{param_value}"
+else:
+    sweep_str = ""
 
-# Plot MSE Loss (log scale)
-ax1.plot(mse_losses)
-ax1.set_xlabel('Batch')
-ax1.set_ylabel('MSE Loss')
-ax1.set_title(f'MSE Loss ({MODEL_TYPE}, {OPTIMIZER_TYPE})')
-ax1.set_yscale('log')
-ax1.grid(True, which="both", ls="-", alpha=0.2)
+# Use paths relative to project root
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+weights_dir = os.path.join(project_root, 'model_weights')
 
-# Plot Variance Explained
-ax2.plot(variance_explained)
-ax2.set_xlabel('Batch')
-ax2.set_ylabel('Variance Explained')
-ax2.set_title(f'Variance Explained ({MODEL_TYPE}, {OPTIMIZER_TYPE})')
-ax2.set_ylim([0, 1])
-ax2.grid(True)
+# Create directory if it doesn't exist
+os.makedirs(weights_dir, exist_ok=True)
 
-# Plot FVU (log scale)
-ax3.plot(fvu_values)
-ax3.set_xlabel('Batch')
-ax3.set_ylabel('FVU (Fraction of Variance Unexplained)')
-ax3.set_title(f'FVU ({MODEL_TYPE}, {OPTIMIZER_TYPE})')
-ax3.set_yscale('log')
-ax3.grid(True, which="both", ls="-", alpha=0.2)
-
-plt.tight_layout()
-plot_path = f"figures/training_metrics_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.png"
-plt.savefig(plot_path, dpi=150, bbox_inches='tight')
-print(f"Training plot saved to {plot_path}")
-plt.close()
-
-# Save model weights
-save_path = f"model_weights/transcoder_weights_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.pt"
+# Save model weights and training data
+save_path = os.path.join(weights_dir, f"transcoder_weights_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b{sweep_str}.pt")
 save_model_checkpoint(
     transcoder,
     optimizer,
