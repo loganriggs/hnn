@@ -69,7 +69,8 @@ fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 # Plot MSE Loss (log scale)
 ax1 = axes[0]
 for r in results:
-    ax1.plot(r['mse_losses'], label=r['label'], linewidth=2)
+    batch_numbers = list(range(len(r['mse_losses'])))
+    ax1.plot(batch_numbers, r['mse_losses'], label=r['label'], linewidth=2)
 ax1.set_xlabel('Batch', fontsize=12)
 ax1.set_ylabel('MSE Loss', fontsize=12)
 ax1.set_title('MSE Loss vs Batch', fontsize=14, fontweight='bold')
@@ -80,7 +81,8 @@ ax1.legend(title='Hidden Multiplier', fontsize=10)
 # Plot Variance Explained
 ax2 = axes[1]
 for r in results:
-    ax2.plot(r['variance_explained'], label=r['label'], linewidth=2)
+    batch_numbers = list(range(len(r['variance_explained'])))
+    ax2.plot(batch_numbers, r['variance_explained'], label=r['label'], linewidth=2)
 ax2.set_xlabel('Batch', fontsize=12)
 ax2.set_ylabel('Variance Explained', fontsize=12)
 ax2.set_title('Variance Explained vs Batch', fontsize=14, fontweight='bold')
@@ -91,7 +93,8 @@ ax2.legend(title='Hidden Multiplier', fontsize=10)
 # Plot FVU (log scale)
 ax3 = axes[2]
 for r in results:
-    ax3.plot(r['fvu_values'], label=r['label'], linewidth=2)
+    batch_numbers = list(range(len(r['fvu_values'])))
+    ax3.plot(batch_numbers, r['fvu_values'], label=r['label'], linewidth=2)
 ax3.set_xlabel('Batch', fontsize=12)
 ax3.set_ylabel('FVU (Fraction of Variance Unexplained)', fontsize=12)
 ax3.set_title('FVU vs Batch', fontsize=14, fontweight='bold')

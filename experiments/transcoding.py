@@ -4,6 +4,7 @@ import yaml
 import argparse
 import os
 import sys
+import time
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -144,6 +145,9 @@ transcoder.train()
 # Check initial GPU memory
 print_gpu_memory("before training")
 
+# Start timing
+start_time = time.time()
+
 pbar = tqdm(enumerate(pile_dataloader), total=n_batches, desc="Training")
 for batch_idx, batch in pbar:
     if batch_idx >= n_batches:
@@ -219,6 +223,11 @@ for batch_idx, batch in pbar:
     })
 
 print("\nTraining complete!")
+
+# End timing
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Training time: {elapsed_time:.2f} seconds ({elapsed_time/60:.2f} minutes)")
 
 # Final GPU memory check
 print_gpu_memory("after training")

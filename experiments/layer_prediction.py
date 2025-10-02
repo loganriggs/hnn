@@ -4,6 +4,7 @@ import yaml
 import argparse
 import os
 import sys
+import time
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,7 +12,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 from utils import (
     Linear, Bilinear, MLP, Config,
     calculate_fvu,
@@ -163,6 +163,9 @@ transcoder.train()
 
 print_gpu_memory("before training")
 
+# Start timing
+start_time = time.time()
+
 pbar = tqdm(enumerate(pile_dataloader), total=n_batches, desc="Training")
 for batch_idx, batch in pbar:
     if batch_idx >= n_batches:
@@ -248,44 +251,20 @@ for batch_idx, batch in pbar:
 
 print("\nTraining complete!")
 
+# End timing
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Training time: {elapsed_time:.2f} seconds ({elapsed_time/60:.2f} minutes)")
+
 print_gpu_memory("after training")
 
-# %%
-# Plot metrics with log scale
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 4))
+# Use paths relative to project root
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+weights_dir = os.path.join(project_root, 'model_weights')
+os.makedirs(weights_dir, exist_ok=True)
 
-# Plot MSE Loss (log scale)
-ax1.plot(mse_losses)
-ax1.set_xlabel('Batch')
-ax1.set_ylabel('MSE Loss')
-ax1.set_title(f'MSE Loss ({MODEL_TYPE}, {OPTIMIZER_TYPE}, L{INPUT_LAYER}→L{TARGET_LAYER})')
-ax1.set_yscale('log')
-ax1.grid(True, which="both", ls="-", alpha=0.2)
-
-# Plot Variance Explained
-ax2.plot(variance_explained)
-ax2.set_xlabel('Batch')
-ax2.set_ylabel('Variance Explained')
-ax2.set_title(f'Variance Explained ({MODEL_TYPE}, {OPTIMIZER_TYPE}, L{INPUT_LAYER}→L{TARGET_LAYER})')
-ax2.set_ylim([0, 1])
-ax2.grid(True)
-
-# Plot FVU (log scale)
-ax3.plot(fvu_values)
-ax3.set_xlabel('Batch')
-ax3.set_ylabel('FVU')
-ax3.set_title(f'FVU ({MODEL_TYPE}, {OPTIMIZER_TYPE}, L{INPUT_LAYER}→L{TARGET_LAYER})')
-ax3.set_yscale('log')
-ax3.grid(True, which="both", ls="-", alpha=0.2)
-
-plt.tight_layout()
-plot_path = f"figures/layer_pred_l{INPUT_LAYER}_l{TARGET_LAYER}_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.png"
-plt.savefig(plot_path, dpi=150, bbox_inches='tight')
-print(f"Training plot saved to {plot_path}")
-plt.close()
-
-# Save model weights
-save_path = f"model_weights/layer_pred_l{INPUT_LAYER}_l{TARGET_LAYER}_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.pt"
+# Save model weights and training data
+save_path = os.path.join(weights_dir, f"layer_pred_l{INPUT_LAYER}_l{TARGET_LAYER}_{MODEL_TYPE.lower()}_{OPTIMIZER_TYPE.lower()}_{n_batches}b.pt")
 save_model_checkpoint(
     transcoder,
     optimizer,
