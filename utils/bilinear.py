@@ -37,7 +37,8 @@ class Bilinear(nn.Module):
     @classmethod
     def from_pretrained(cls, path, device='cpu'):
         """Load a pretrained model from a checkpoint file."""
-        checkpoint = torch.load(path, map_location=device)
+        torch.serialization.add_safe_globals([Config])
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
         cfg = checkpoint['config']
         model = cls(cfg)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -75,7 +76,8 @@ class Linear(nn.Module):
     @classmethod
     def from_pretrained(cls, path, device='cpu'):
         """Load a pretrained model from a checkpoint file."""
-        checkpoint = torch.load(path, map_location=device)
+        torch.serialization.add_safe_globals([Config])
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
         cfg = checkpoint['config']
         model = cls(cfg)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -102,7 +104,8 @@ class MLP(nn.Module):
     @classmethod
     def from_pretrained(cls, path, device='cpu'):
         """Load a pretrained model from a checkpoint file."""
-        checkpoint = torch.load(path, map_location=device)
+        torch.serialization.add_safe_globals([Config])
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
         cfg = checkpoint['config']
         model = cls(cfg)
         model.load_state_dict(checkpoint['model_state_dict'])

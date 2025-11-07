@@ -24,7 +24,8 @@ import pandas as pd
 LAYER_IDX = 2  # Which layer's transcoder to analyze
 MODEL_NAME = "EleutherAI/pythia-410m"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-N_BATCHES = 256  # How many batches to sample for manifold
+# N_BATCHES = 256  # How many batches to sample for manifold
+N_BATCHES = 128  # How many batches to sample for manifold
 BATCH_SIZE = 32  # Batch size for processing
 MAX_LENGTH = 128  # Maximum sequence length
 
@@ -42,8 +43,15 @@ model.eval()
 print(f"Model loaded: {MODEL_NAME}")
 
 #%% Load transcoder
-checkpoint_path = f"model_weights/transcoder_weights_l{LAYER_IDX}_bilinear_muon_3000b.pt"
-print(f"\nLoading transcoder from: {checkpoint_path}")
+from huggingface_hub import hf_hub_download
+
+# Download from HuggingFace
+repo_id = "Elriggs/hnn_transcoders"
+filename = f"layer_{LAYER_IDX}/transcoder_weights_l{LAYER_IDX}_bilinear_muon_3000b.pt"
+print(f"\nDownloading transcoder from HuggingFace: {repo_id}/{filename}")
+
+checkpoint_path = hf_hub_download(repo_id=repo_id, filename=filename)
+print(f"Downloaded to: {checkpoint_path}")
 
 transcoder, checkpoint = Bilinear.from_pretrained(checkpoint_path, device=DEVICE)
 transcoder.eval()
@@ -54,7 +62,7 @@ print(f"Transcoder loaded: {config.n_inputs} → {config.n_hidden} → {config.n
 
 #%% Find clusters of similar features
 print("\nFinding feature clusters...")
-TAU = 0.7  # Cosine similarity threshold for clustering
+TAU = 0.6  # Cosine similarity threshold for clustering
 
 # Get weight matrices
 W = transcoder.head.weight  # [n_hidden, n_outputs] (down projection)
@@ -283,7 +291,7 @@ next_token_preds = torch.cat(next_token_preds, dim=0)  # [n_points]
 print(f"Sampled {len(projected_points)} data points")
 
 #%% Select top-k points by quadratic value and create dataframe
-K_VIS = 100000  # Number of points to visualize
+K_VIS = 250_000  # Number of points to visualize
 
 # Get top-k by absolute quadratic value
 top_k_vals, top_k_idx = quadratic_values.abs().topk(k=min(K_VIS, len(quadratic_values)))
@@ -307,65 +315,37 @@ df = pd.DataFrame({
 print(f"\nDataframe created with {len(df)} points")
 print(df.head())
 
-#%% Visualize 2D projection
-# print("\nCreating 2D visualization...")
-
-# fig, ax = plt.subplots(figsize=(12, 10))
-# scatter = ax.scatter(
-#     df['x'],
-#     df['y'],
-#     c=df['value'],
-#     cmap='RdBu_r',
-#     alpha=0.6,
-#     s=1,
-#     vmin=-df['value'].abs().max(),
-#     vmax=df['value'].abs().max()
-# )
-# plt.colorbar(scatter, ax=ax, label='Quadratic form value (x^T M x)')
-# ax.set_xlabel(f'Eigenvector {top_k_indices[0].item()} projection')
-# ax.set_ylabel(f'Eigenvector {top_k_indices[1].item()} projection')
-# ax.set_title(f'Manifold Visualization - Cluster {cluster_label} (Layer {LAYER_IDX})\n{len(cluster_indices)} features, {len(df)} points')
-# ax.grid(True, alpha=0.3)
-# plt.tight_layout()
-# plt.savefig(f'figures/manifold_2d_cluster_{cluster_label}_l{LAYER_IDX}.png', dpi=150, bbox_inches='tight')
-# print(f"Saved to: figures/manifold_2d_cluster_{cluster_label}_l{LAYER_IDX}.png")
-# plt.show()
-
 #%% 3D visualization (optional - requires plotly)
-try:
-    import plotly.express as px
+import plotly.express as px
 
-    print("\nCreating 3D interactive visualization...")
+print("\nCreating 3D interactive visualization...")
 
-    fig = px.scatter_3d(
-        df,
-        x='x',
-        y='y',
-        z='z',
-        color='value',
-        hover_data={'token': True, 'x': False, 'y': False, 'z': False, 'value': ':.4f'},
-        color_continuous_scale='RdBu_r',
-        color_continuous_midpoint=0.0,
-        title=f'3D Manifold - Cluster {cluster_label} (Layer {LAYER_IDX})',
-        height=800,
-        width=800
+fig = px.scatter_3d(
+    df,
+    x='x',
+    y='y',
+    z='z',
+    color='value',
+    hover_data={'token': True, 'x': False, 'y': False, 'z': False, 'value': ':.4f'},
+    color_continuous_scale='RdBu_r',
+    color_continuous_midpoint=0.0,
+    title=f'3D Manifold - Cluster {cluster_label} (Layer {LAYER_IDX})',
+    height=800,
+    width=800
+)
+
+fig.update_layout(
+    scene=dict(
+        xaxis_title=f'Eigenvec {top_k_indices[0].item()}',
+        yaxis_title=f'Eigenvec {top_k_indices[1].item()}',
+        zaxis_title=f'Eigenvec {top_k_indices[2].item()}'
     )
+)
 
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=f'Eigenvec {top_k_indices[0].item()}',
-            yaxis_title=f'Eigenvec {top_k_indices[1].item()}',
-            zaxis_title=f'Eigenvec {top_k_indices[2].item()}'
-        )
-    )
+fig.write_html(f'figures/manifold_3d_cluster_{cluster_label}_l{LAYER_IDX}.html')
+print(f"Saved to: figures/manifold_3d_cluster_{cluster_label}_l{LAYER_IDX}.html")
+fig.show()
 
-    fig.write_html(f'figures/manifold_3d_cluster_{cluster_label}_l{LAYER_IDX}.html')
-    print(f"Saved to: figures/manifold_3d_cluster_{cluster_label}_l{LAYER_IDX}.html")
-    fig.show()
-
-except ImportError:
-    print("\nPlotly not available - skipping 3D visualization")
-    print("Install with: pip install plotly")
 
 #%% Summary statistics
 print("\n" + "="*80)
